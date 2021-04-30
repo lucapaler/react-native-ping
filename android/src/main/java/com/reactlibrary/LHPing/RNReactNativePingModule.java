@@ -11,9 +11,16 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableArray;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+
 public class RNReactNativePingModule extends ReactContextBaseJavaModule {
     private final String TIMEOUT_KEY = "timeout";
+    private final String THREADS_KEY = "threads";
     private final ReactApplicationContext reactContext;
     HandlerThread handlerThread = new HandlerThread("HandlerThread");
 
@@ -24,12 +31,12 @@ public class RNReactNativePingModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void start(final String ipAddress, ReadableMap option, final Promise promise) {
-        if (ipAddress == null || (ipAddress != null && ipAddress.length() == 0)) {
-            LHDefinition.PING_ERROR_CODE error = LHDefinition.PING_ERROR_CODE.HostErrorNotSetHost;
-            promise.reject(error.getCode(), error.getMessage());
-            return;
-        }
+    public void start(final ReadableArray ipAddresses, ReadableMap option, final Promise promise) {
+        // if (ipAddress == null || (ipAddress != null && ipAddress.length() == 0)) {
+        //     LHDefinition.PING_ERROR_CODE error = LHDefinition.PING_ERROR_CODE.HostErrorNotSetHost;
+        //     promise.reject(error.getCode(), error.getMessage());
+        //     return;
+        // }
 
         final boolean[] isFinish = {false};
         int timeout = 1000;
@@ -37,6 +44,13 @@ public class RNReactNativePingModule extends ReactContextBaseJavaModule {
             timeout = option.getInt(TIMEOUT_KEY);
         }
         final int finalTimeout = timeout;
+
+        int threads = 5;
+        if (option.hasKey(THREADS_KEY)) {
+            threads = option.getInt(THREADS_KEY);
+        }
+
+        final int finalThreads = threads;
 
         Handler mHandler = new Handler(handlerThread.getLooper());
         mHandler.post(new Runnable() {
@@ -46,10 +60,24 @@ public class RNReactNativePingModule extends ReactContextBaseJavaModule {
                     if (isFinish[0]) {
                         return;//Prevent multiple calls
                     }
-                    int rtt = PingUtil.getAvgRTT(ipAddress, 1, finalTimeout);
-                    promise.resolve(Integer.valueOf(rtt));
+                    ArrayList<Integer> responses = PingUtil.getAvgRTT(ipAddresses.toArrayList(), 1, finalTimeout, finalThreads);
+
+                    Integer[] returnArray = new Integer[responses.size()];
+                    returnArray = responses.toArray(returnArray);
+
+                    System.out.println("RETURN ARRAY IS " + Arrays.toString(returnArray));
+
+                    WritableArray promiseArray = Arguments.createArray();
+                    for(int i = 0; i < returnArray.length; i++){
+                        promiseArray.pushInt(returnArray[i]);
+                    }
+                    
+                    promise.resolve(promiseArray);
                     isFinish[0] = true;
                 } catch (Exception e) {
+                    System.out.println("RETURN ERROR???/");
+                    e.printStackTrace();
+
                     if (isFinish[0]) {//Prevent multiple calls
                         return;
                     }

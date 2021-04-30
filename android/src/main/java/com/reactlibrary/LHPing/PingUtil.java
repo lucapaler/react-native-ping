@@ -8,6 +8,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.util.regex.Pattern;
+import java.lang.Thread;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -63,8 +66,8 @@ public class PingUtil {
      * @param url 需要ping的url地址
      * @return 平均RTT值，单位 ms 注意：-1是默认值，返回-1表示获取失败
      */
-    public static int getAvgRTT(String url) {
-        return getAvgRTT(url, 1, 100);
+    public static ArrayList<Integer> getAvgRTT(ArrayList<Object> url) {
+        return getAvgRTT(url, 1, 100, 0);
     }
 
     /**
@@ -116,16 +119,76 @@ public class PingUtil {
     /**
      * 获取ping url的平均RTT
      *
-     * @param domain  需要ping的domain
+     * @param domains  需要ping的domain
      * @param count   需要ping的次数
      * @param timeout 需要ping的超时时间，单位 ms
      * @return 平均RTT值，单位 ms 注意：-1是默认值，返回-1表示获取失败
      */
-    public static int getAvgRTT(String domain, int count, int timeout) {
-        String pingString = ping(createSimplePingCommand(count, timeout, domain), timeout);
-        String tempInfo = pingString.substring(pingString.indexOf("min/avg/max/mdev") + 19);
-        String[] temps = tempInfo.split("/");
-        return Math.round(Float.valueOf(temps[1]));
+    // public static int getAvgRTT(String domain, int count, int timeout) {
+    //     // String pingString = ping(createSimplePingCommand(count, timeout, domain), timeout);
+    //     int pingString = ping(createSimplePingCommand(count, timeout, domain), timeout);
+    //     // String tempInfo = pingString.substring(pingString.indexOf("min/avg/max/mdev") + 19);
+    //     // String[] temps = tempInfo.split("/");
+    //     // return Math.round(Float.valueOf(temps[1]));
+    //     return pingString;
+    // }
+    public static ArrayList<Integer> getAvgRTT(ArrayList<Object> domains, final int count, final int timeout, int chunk) {
+        int i, j;
+
+        final ArrayList<Integer> responses = new ArrayList<Integer>();
+
+        for (i = 0, j = domains.size(); i < j; i += chunk) {
+            if (i < domains.size() - 1) {
+                final List<Object> ips = domains.subList(i, i + 3);
+
+                threadedPing(ips, count, timeout, responses);
+            } else {
+                final List<Object> ips = domains.subList(i, domains.size() - 1);
+
+                threadedPing(ips, count, timeout, responses);
+            }
+        }
+
+        System.out.println("RESPONSES ARE " + responses);
+
+        return responses;
+    }
+
+    public static void threadedPing(final List<Object> ips, final int count, final int timeout, final ArrayList<Integer> responses) {
+        System.out.println("PINGING " + ips);
+
+        ArrayList<Thread> threads = new ArrayList<Thread>();
+
+        for (int k = 0; k < 3; k++) {
+            final int index = k;
+
+            threads.add(new Thread() {
+                public void run() {
+                    Integer response = ping(createSimplePingCommand(count, timeout, (String) ips.get(index)), timeout);
+
+                    responses.add(response);
+                    System.out.println("Thread complete");
+                }
+            });
+        }
+
+        long start = System.currentTimeMillis();
+
+        for (Thread thread : threads) {
+            thread.start();
+        }
+
+        for (Thread thread : threads) {
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                System.out.println("Thread interrupted down here");
+            }
+        }
+
+        long end = System.currentTimeMillis();
+
+        System.out.println("JUST SCANNED 3 IPS IN " + (end - start));
     }
 
     /**
@@ -293,32 +356,30 @@ public class PingUtil {
         return null;
     }
 
-    private static String ping(String command, int timeout) {
+    private static int ping(String command, int timeout) {
         Process process = null;
         long startTime = System.currentTimeMillis();
+
         try {
+            System.out.println("EXECUTING COMMAND " + command);
             process = Runtime.getRuntime().exec(command);
-            InputStream is = process.getInputStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            boolean isBreak = false;
+
+            System.out.println("WAITING");
+
             while (true) {
                 long currentTime = System.currentTimeMillis();
-                if (isBreak || (currentTime - startTime > timeout)) {
+                if (currentTime - startTime > timeout) {
                     break;
                 }
-                if (reader.ready()) {
-                    while (null != (line = reader.readLine())) {
-                        sb.append(line);
-                        sb.append("\n");
-                    }
-                    isBreak = true;
-                }
             }
-            reader.close();
-            is.close();
-            return sb.toString();
+
+            System.out.println("FINISHED");
+
+            try {
+                return process.exitValue();
+            } catch (Exception e) {
+                return 1;
+            }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -326,8 +387,45 @@ public class PingUtil {
                 process.destroy();
             }
         }
-        return null;
+
+        return 2;
     }
+
+    // private static String ping(String command, int timeout) {
+    //     Process process = null;
+    //     long startTime = System.currentTimeMillis();
+    //     try {
+    //         process = Runtime.getRuntime().exec(command);
+    //         InputStream is = process.getInputStream();
+    //         BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+    //         StringBuilder sb = new StringBuilder();
+    //         String line;
+    //         boolean isBreak = false;
+    //         while (true) {
+    //             long currentTime = System.currentTimeMillis();
+    //             if (isBreak || (currentTime - startTime > timeout)) {
+    //                 break;
+    //             }
+    //             if (reader.ready()) {
+    //                 while (null != (line = reader.readLine())) {
+    //                     sb.append(line);
+    //                     sb.append("\n");
+    //                 }
+    //                 isBreak = true;
+    //             }
+    //         }
+    //         reader.close();
+    //         is.close();
+    //         return sb.toString();
+    //     } catch (IOException e) {
+    //         e.printStackTrace();
+    //     } finally {
+    //         if (null != process) {
+    //             process.destroy();
+    //         }
+    //     }
+    //     return null;
+    // }
 
     private static String createSimplePingCommand(int count, int timeout, String domain) {
         return "/system/bin/ping -c " + count + " -w " + timeout + " " + domain;
