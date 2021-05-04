@@ -17,6 +17,7 @@ import com.facebook.react.bridge.WritableArray;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 
 public class RNReactNativePingModule extends ReactContextBaseJavaModule {
     private final String TIMEOUT_KEY = "timeout";
@@ -60,19 +61,17 @@ public class RNReactNativePingModule extends ReactContextBaseJavaModule {
                     if (isFinish[0]) {
                         return;//Prevent multiple calls
                     }
-                    ArrayList<Integer> responses = PingUtil.getAvgRTT(ipAddresses.toArrayList(), 1, finalTimeout, finalThreads);
+                    Map<String, Integer> responses = PingUtil.getAvgRTT(ipAddresses.toArrayList(), 1, finalTimeout, finalThreads);
 
-                    Integer[] returnArray = new Integer[responses.size()];
-                    returnArray = responses.toArray(returnArray);
+                    WritableMap promiseMap = Arguments.createMap();
 
-                    System.out.println("RETURN ARRAY IS " + Arrays.toString(returnArray));
-
-                    WritableArray promiseArray = Arguments.createArray();
-                    for(int i = 0; i < returnArray.length; i++){
-                        promiseArray.pushInt(returnArray[i]);
+                    for (Map.Entry<String, Integer> entry : responses.entrySet()) {
+                        promiseMap.putInt(entry.getKey(), entry.getValue());
                     }
+
+                    System.out.println("RETURN MAP IS " + responses.toString());
                     
-                    promise.resolve(promiseArray);
+                    promise.resolve(promiseMap);
                     isFinish[0] = true;
                 } catch (Exception e) {
                     System.out.println("RETURN ERROR???/");

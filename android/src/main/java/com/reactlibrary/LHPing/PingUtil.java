@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.lang.Thread;
 import java.util.ArrayList;
@@ -66,7 +68,7 @@ public class PingUtil {
      * @param url 需要ping的url地址
      * @return 平均RTT值，单位 ms 注意：-1是默认值，返回-1表示获取失败
      */
-    public static ArrayList<Integer> getAvgRTT(ArrayList<Object> url) {
+    public static Map<String, Integer> getAvgRTT(ArrayList<Object> url) {
         return getAvgRTT(url, 1, 100, 0);
     }
 
@@ -132,20 +134,23 @@ public class PingUtil {
     //     // return Math.round(Float.valueOf(temps[1]));
     //     return pingString;
     // }
-    public static ArrayList<Integer> getAvgRTT(ArrayList<Object> domains, final int count, final int timeout, int chunk) {
+    public static Map<String, Integer> getAvgRTT(ArrayList<Object> domains, final int count, final int timeout, int chunk) {
         int i, j;
 
-        final ArrayList<Integer> responses = new ArrayList<Integer>();
+        System.out.println("DOMAINS ARE " + domains.toString());
+        System.out.println("CHUNK IS " + chunk);
+
+        final Map<String, Integer> responses = new HashMap<>();
 
         for (i = 0, j = domains.size(); i < j; i += chunk) {
-            if (i < domains.size() - 1) {
-                final List<Object> ips = domains.subList(i, i + 3);
+            if (i + chunk < domains.size()) {
+                final List<Object> ips = domains.subList(i, i + chunk);
 
-                threadedPing(ips, count, timeout, responses);
+                threadedPing(ips, chunk, count, timeout, responses);
             } else {
-                final List<Object> ips = domains.subList(i, domains.size() - 1);
+                final List<Object> ips = domains.subList(i, domains.size());
 
-                threadedPing(ips, count, timeout, responses);
+                threadedPing(ips, chunk, count, timeout, responses);
             }
         }
 
@@ -154,19 +159,21 @@ public class PingUtil {
         return responses;
     }
 
-    public static void threadedPing(final List<Object> ips, final int count, final int timeout, final ArrayList<Integer> responses) {
+    public static void threadedPing(final List<Object> ips, int chunk, final int count, final int timeout, final Map<String, Integer> responses) {
         System.out.println("PINGING " + ips);
 
         ArrayList<Thread> threads = new ArrayList<Thread>();
 
-        for (int k = 0; k < 3; k++) {
+        for (int k = 0; k < chunk; k++) {
             final int index = k;
 
             threads.add(new Thread() {
                 public void run() {
-                    Integer response = ping(createSimplePingCommand(count, timeout, (String) ips.get(index)), timeout);
+                    String ip = (String) ips.get(index);
 
-                    responses.add(response);
+                    Integer response = ping(createSimplePingCommand(count, timeout, ip), timeout);
+
+                    responses.put(ip, response);
                     System.out.println("Thread complete");
                 }
             });
@@ -188,7 +195,7 @@ public class PingUtil {
 
         long end = System.currentTimeMillis();
 
-        System.out.println("JUST SCANNED 3 IPS IN " + (end - start));
+        System.out.println("JUST SCANNED IPS IN " + (end - start));
     }
 
     /**
